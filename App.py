@@ -287,7 +287,7 @@ if mode == "📷 كاميرا مباشرة (Live)":
         # the TURN relay over TCP only. If the camera works with this line
         # uncommented but not without it, that confirms outbound UDP is
         # blocked at the platform level (not just the viewer's network).
-        # "iceTransportPolicy": "relay",
+         "iceTransportPolicy": "relay",
     }
 
     webrtc_streamer(
