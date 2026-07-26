@@ -33,10 +33,11 @@ from preprocessing import face_crop_to_tensor
 MODEL_PATH = "best_model_combined.pth"  # local filename the model is saved/downloaded as
 TEMPERATURE_PATH = "temperature.json"   # produced by the training notebook (calibration)
 
-# ↓↓↓ PASTE YOUR GITHUB RELEASE LINKS HERE (leave "" to disable auto-download) ↓↓↓
-MODEL_URL = "https://github.com/USERNAME/REPO/releases/download/v1.0/best_model_combined.pth"
-TEMPERATURE_URL = "https://github.com/USERNAME/REPO/releases/download/v1.0/temperature.json"
-# ↑↑↑ replace USERNAME/REPO/v1.0 with your actual repo + release tag ↑↑↑
+# ↓↓↓ Direct download link for the trained model (GitHub Release asset) ↓↓↓
+MODEL_URL = "https://github.com/mostafaeltaweel/Facial-Emotion-Recognition/releases/download/v1.0/best_model_combined.pth"
+# No temperature.json was uploaded to the release, so this stays empty —
+# the app will just use TEMPERATURE = 1.0 (no calibration) until you add one.
+TEMPERATURE_URL = ""
 
 CONFIDENCE_THRESHOLD = 0.40             # below this -> "Uncertain"
 DETECT_EVERY_N_FRAMES = 5               # throttling: run the model every N frames
