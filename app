@@ -20,6 +20,7 @@ from collections import deque
 import av
 import cv2
 import numpy as np
+import requests
 import streamlit as st
 import torch
 import torch.nn.functional as F
@@ -29,8 +30,14 @@ from model import load_model, EMOTION_LABELS, EMOTION_EMOJI
 from preprocessing import face_crop_to_tensor
 
 # ─────────────────────────── Configuration ───────────────────────────
-MODEL_PATH = "best_model_ferplus.pth"   # <-- put your trained .pth file next to app.py
-TEMPERATURE_PATH = "temperature.json"   # <-- produced by the training notebook (calibration)
+MODEL_PATH = "best_model_combined.pth"  # local filename the model is saved/downloaded as
+TEMPERATURE_PATH = "temperature.json"   # produced by the training notebook (calibration)
+
+# ↓↓↓ PASTE YOUR GITHUB RELEASE LINKS HERE (leave "" to disable auto-download) ↓↓↓
+MODEL_URL = "https://github.com/USERNAME/REPO/releases/download/v1.0/best_model_combined.pth"
+TEMPERATURE_URL = "https://github.com/USERNAME/REPO/releases/download/v1.0/temperature.json"
+# ↑↑↑ replace USERNAME/REPO/v1.0 with your actual repo + release tag ↑↑↑
+
 CONFIDENCE_THRESHOLD = 0.40             # below this -> "Uncertain"
 DETECT_EVERY_N_FRAMES = 5               # throttling: run the model every N frames
 SMOOTHING_WINDOW = 6                    # live camera: average probs over the last N detections per face
@@ -44,9 +51,41 @@ FACE_CASCADE = cv2.CascadeClassifier(
 )
 
 
+def download_if_missing(local_path, url, label):
+    """Downloads a file from a direct URL (e.g. a GitHub Release asset) if it
+    isn't already sitting next to app.py. Shows a progress bar since the
+    model file can be tens of MBs. Safe to call every run — it's a no-op
+    once the file exists locally."""
+    if os.path.exists(local_path) or not url:
+        return os.path.exists(local_path)
+
+    try:
+        with st.spinner(f"جاري تحميل {label} أول مرة فقط (لن يتكرر لاحقًا)..."):
+            response = requests.get(url, stream=True, timeout=30)
+            response.raise_for_status()
+            total = int(response.headers.get("content-length", 0))
+            progress = st.progress(0)
+            downloaded = 0
+            tmp_path = local_path + ".part"
+            with open(tmp_path, "wb") as f:
+                for chunk in response.iter_content(chunk_size=1024 * 1024):
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    if total:
+                        progress.progress(min(downloaded / total, 1.0))
+            os.rename(tmp_path, local_path)
+            progress.empty()
+        return True
+    except Exception as e:
+        st.error(f"تعذّر تحميل {label} تلقائيًا: {e}\n"
+                  f"حمّله يدويًا وحطه بجانب app.py باسم '{local_path}'.")
+        return False
+
+
 def load_temperature():
     """Loads the calibration temperature saved by the training notebook.
     Falls back to 1.0 (no calibration) if the file isn't there yet."""
+    download_if_missing(TEMPERATURE_PATH, TEMPERATURE_URL, "ملف المعايرة (temperature.json)")
     if os.path.exists(TEMPERATURE_PATH):
         with open(TEMPERATURE_PATH) as f:
             return float(json.load(f).get("temperature", 1.0))
@@ -58,6 +97,8 @@ TEMPERATURE = load_temperature()
 # ─────────────────────────── Model loading (cached) ───────────────────────────
 @st.cache_resource
 def get_model():
+    if not download_if_missing(MODEL_PATH, MODEL_URL, "الموديل (best_model_combined.pth)"):
+        st.stop()  # no local file AND download failed -> nothing we can do
     return load_model(MODEL_PATH, device=DEVICE)
 
 
