@@ -265,9 +265,35 @@ st.divider()
 
 if mode == "📷 كاميرا مباشرة (Live)":
     st.info("اضغط START وامنح المتصفح إذن الوصول للكاميرا.")
+
+    # STUN alone often fails behind restrictive networks/firewalls (this is what
+    # caused the "process_offer" / ICE retry errors in the logs). A TURN server
+    # relays the video when a direct peer connection can't be established.
+    # This uses the free public Open Relay Project TURN service.
+    RTC_CONFIGURATION = {
+        "iceServers": [
+            {"urls": ["stun:stun.l.google.com:19302"]},
+            {
+                "urls": [
+                    "turn:openrelay.metered.ca:80",
+                    "turn:openrelay.metered.ca:443",
+                    "turn:openrelay.metered.ca:443?transport=tcp",
+                ],
+                "username": "openrelayproject",
+                "credential": "openrelayproject",
+            },
+        ],
+        # DIAGNOSTIC: uncomment the line below to force ALL traffic through
+        # the TURN relay over TCP only. If the camera works with this line
+        # uncommented but not without it, that confirms outbound UDP is
+        # blocked at the platform level (not just the viewer's network).
+        # "iceTransportPolicy": "relay",
+    }
+
     webrtc_streamer(
         key="emotion-detection",
         mode=WebRtcMode.SENDRECV,
+        rtc_configuration=RTC_CONFIGURATION,
         video_processor_factory=EmotionVideoProcessor,
         media_stream_constraints={"video": True, "audio": False},
         async_processing=True,
