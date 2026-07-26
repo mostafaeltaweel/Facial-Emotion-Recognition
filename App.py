@@ -46,9 +46,34 @@ UNCERTAIN_COLOR = (0, 165, 255)         # BGR orange
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-FACE_CASCADE = cv2.CascadeClassifier(
-    cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-)
+
+def get_haarcascade_path():
+    """Locates haarcascade_frontalface_default.xml. Some opencv-python-headless
+    builds on Streamlit Cloud don't expose cv2.data (AttributeError), so we
+    fall back to searching the cv2 install directory directly."""
+    try:
+        path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+        if os.path.exists(path):
+            return path
+    except AttributeError:
+        pass
+
+    # Fallback: look inside the installed cv2 package folder manually
+    cv2_dir = os.path.dirname(cv2.__file__)
+    for candidate in [
+        os.path.join(cv2_dir, "data", "haarcascade_frontalface_default.xml"),
+        os.path.join(cv2_dir, "..", "cv2", "data", "haarcascade_frontalface_default.xml"),
+    ]:
+        if os.path.exists(candidate):
+            return candidate
+
+    raise FileNotFoundError(
+        "Could not locate haarcascade_frontalface_default.xml in the opencv "
+        "installation. Try pinning 'opencv-python-headless==4.9.0.80' in requirements.txt."
+    )
+
+
+FACE_CASCADE = cv2.CascadeClassifier(get_haarcascade_path())
 
 
 def download_if_missing(local_path, url, label):
