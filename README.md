@@ -58,6 +58,24 @@ streamlit run app.py
 ### خطوة إضافية مطلوبة منك
 بعد ما يخلص التدريب بالنوتبوك، رح تلاقي ملف `/kaggle/working/temperature.json` — **حمّله وحطه بجانب `app.py`** مع ملف الموديل. لو مش موجود، التطبيق بيشتغل عادي بس بدون معايرة (T=1.0 افتراضيًا).
 
+## تحميل الموديل تلقائيًا من GitHub Release (بدل رفعه بالريبو مباشرة)
+
+بما إن ملف الموديل أكبر من حد رفع 25MB بواجهة GitHub، الحل هو رفعه كـ **Release Asset** (يدعم لحد 2GB):
+1. بريبو المشروع → تبويب **Releases** → **Create a new release**.
+2. اسحب وفلّت `best_model_combined.pth` و`temperature.json` بمنطقة "Attach binaries".
+3. اضغط **Publish** — رح يطلع لك رابط مباشر شكله:
+   `https://github.com/USERNAME/REPO/releases/download/v1.0/best_model_combined.pth`
+
+بعدين عدّل هذول السطرين بأول `app.py`:
+```python
+MODEL_URL = "https://github.com/USERNAME/REPO/releases/download/v1.0/best_model_combined.pth"
+TEMPERATURE_URL = "https://github.com/USERNAME/REPO/releases/download/v1.0/temperature.json"
+```
+
+**كيف بيشتغل**: أول مرة يفتح فيها حد التطبيق (`streamlit run app.py`) وما يلاقي الملفات محليًا، بينزلها تلقائيًا (مع progress bar)، وبعدين ما بيعيد التحميل تاني طالما الملف موجود بنفس المجلد. لو التحميل فشل (مثلاً مافيش إنترنت)، بيطلع رسالة واضحة تقولك تحمّل الملف يدويًا.
+
+> ملاحظة: لو رفعت الملفات فعلاً محليًا بجانب `app.py` (مش عن طريق الرابط)، مش لازم تعدّل `MODEL_URL`/`TEMPERATURE_URL` أصلاً — الكود بيشيك الملف المحلي أول، ولو موجود بيتجاهل الرابط كليًا.
+
 ## ملاحظات مهمة قبل المناقشة (Defense)
 
 1. **ترتيب الفئات (Emotion Labels)**: مبني على `sorted(os.listdir(train_path))`
