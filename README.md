@@ -1,93 +1,37 @@
-# Facial Emotion Recognition — Streamlit App
+# Facial Emotion Recognition — Camera App
 
-مشروع تخرج: تصنيف المشاعر من الوجه (Happy, Sad, Angry, Fear, Disgust, Neutral, Surprise)
-باستخدام EfficientNet-B3 + CBAM، مع واجهة Streamlit وكاميرا مباشرة.
+## 1. Put the supplied files in this folder
 
-## بنية المشروع
-```
-emotion_app/
-├── app.py              # واجهة Streamlit (كاميرا حية + رفع صورة)
-├── model.py             # بنية الموديل (EfficientNet-B3 + CBAM) + تحميل الأوزان
-├── preprocessing.py      # نفس المعالجة المستخدمة في التدريب بالضبط
-├── requirements.txt
-└── best_model_ferplus.pth   # ⚠️ ملف الأوزان — لازم تحطه أنت هنا (غير موجود حاليًا)
-```
+Copy these two files beside `app.py`:
 
-## خطوات التشغيل
+- `C:\Users\Admin\Downloads\best_model_combined (4).pth` → rename to `best_model_combined.pth`
+- `C:\Users\Admin\Downloads\temperature.json` → keep this exact name
 
-### 1. ثبّت المتطلبات
-```bash
+`state.db` is not needed for running the model.
+
+## 2. Run locally (recommended first)
+
+In PowerShell, inside this folder:
+
+```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-```
-
-### 2. حط ملف الموديل المدرّب
-انزل ملف `best_model_ferplus.pth` (أو أي checkpoint دربته من النوتبوك) وحطه
-في نفس مجلد `app.py`. لو اسم الملف مختلف، عدّل المتغير `MODEL_PATH` في أول `app.py`.
-
-> **مهم:** استخدمت بنية الموديل + أسماء الطبقات (`ca`, `sa`) المطابقة تمامًا لـ
-> Cell 22 / Cell 25 في النوتبوك بتاعك (نسخة تدريب FER+ و RAF-DB). لو الملف اللي
-> عندك اتدرب بنسخة الموديل الأولى (Cell 4 / Cell 8، الأسماء `channel_att`/`spatial_att`)
-> رح تحتاج تعدّل `model.py` بحيث تتطابق أسماء الطبقات مع الـ checkpoint، وإلا
-> `load_state_dict` رح يرمي خطأ.
-
-### 3. شغّل التطبيق
-```bash
 streamlit run app.py
 ```
 
-## شنو سوينا بالضبط (حسب طلبك)
+Open the `Local URL` shown by Streamlit (normally `http://localhost:8501`), click **START**, then allow camera access in the browser.
 
-| المتطلب | التطبيق |
-|---|---|
-| اكتشاف الوجه | OpenCV Haar Cascade (`haarcascade_frontalface_default.xml`) |
-| الكاميرا الحية | `streamlit-webrtc` (فيديو حقيقي، مو صورة واحدة) |
-| الأداء | الموديل يشتغل كل 5 فريمات فقط (`DETECT_EVERY_N_FRAMES`)، والصندوق يبقى ظاهر بين الفريمات لتفادي الوميض |
-| كروب الوجه | يقص المنطقة داخل bounding box قبل ما يدخل للموديل |
-| التناسق مع التدريب | نفس preprocessing بالضبط: Bilateral Filter → CLAHE → Gamma Correction → Resize 224×224 → Normalize (ImageNet mean/std) |
-| Confidence threshold | لو أعلى احتمال أقل من 40% يعرض "Uncertain" بدل ما يفرض تصنيف خاطئ (المتغير `CONFIDENCE_THRESHOLD`) |
-| رفع صورة | تبويب إضافي بسيط بجانب الكاميرا الحية، بدون أي تعقيد إضافي بالموديل |
+## 3. Deploy to Streamlit Community Cloud
 
-## تحسينات إضافية (سريعة وذات قيمة عالية)
+1. Create a GitHub repository and upload the files in this folder (including the renamed model and `temperature.json`). The model is ~48 MB, below GitHub's 100 MB file limit.
+2. At [share.streamlit.io](https://share.streamlit.io), deploy the repository with main file `app.py`.
+3. Use the generated HTTPS URL; camera permission is available there. Do not use an HTTP public URL, because browsers block camera access on insecure sites.
 
-| التحسين | وين مطبق | الفايدة |
-|---|---|---|
-| **Temperature Scaling** | كل التنبؤات (`TEMPERATURE` مقروءة من `temperature.json`) | يعاير ثقة الموديل عشان `CONFIDENCE_THRESHOLD = 40%` يعكس ثقة حقيقية، مش موديل متحمس زيادة عن اللزوم |
-| **Test-Time Augmentation (TTA)** | تبويب رفع الصورة فقط (`use_tta=True`) | متوسط تنبؤ الصورة الأصلية + انعكاسها الأفقي → دقة أعلى شوي بدون أي تدريب إضافي. ما استخدمناها بالكاميرا الحية عشان ما تبطئ الأداء (استدلال مضاعف لكل فريم) |
-| **Prediction Smoothing (`FaceTracker`)** | الكاميرا الحية بس | بيتتبع كل وجه بين الفريمات (بأقرب مركز صندوق) ويعرض متوسط آخر 6 قراءات (`SMOOTHING_WINDOW`) بدل قراءة فريم واحد لحاله — يمنع "قفز" التصنيف بين المشاعر بسرعة، وتجربة الكاميرا تبان أسلس وأثبت بكثير |
+## Camera troubleshooting
 
-### خطوة إضافية مطلوبة منك
-بعد ما يخلص التدريب بالنوتبوك، رح تلاقي ملف `/kaggle/working/temperature.json` — **حمّله وحطه بجانب `app.py`** مع ملف الموديل. لو مش موجود، التطبيق بيشتغل عادي بس بدون معايرة (T=1.0 افتراضيًا).
-
-## تحميل الموديل تلقائيًا من GitHub Release (بدل رفعه بالريبو مباشرة)
-
-بما إن ملف الموديل أكبر من حد رفع 25MB بواجهة GitHub، الحل هو رفعه كـ **Release Asset** (يدعم لحد 2GB):
-1. بريبو المشروع → تبويب **Releases** → **Create a new release**.
-2. اسحب وفلّت `best_model_combined.pth` و`temperature.json` بمنطقة "Attach binaries".
-3. اضغط **Publish** — رح يطلع لك رابط مباشر شكله:
-   `https://github.com/USERNAME/REPO/releases/download/v1.0/best_model_combined.pth`
-
-بعدين عدّل هذول السطرين بأول `app.py`:
-```python
-MODEL_URL = "https://github.com/USERNAME/REPO/releases/download/v1.0/best_model_combined.pth"
-TEMPERATURE_URL = "https://github.com/USERNAME/REPO/releases/download/v1.0/temperature.json"
-```
-
-**كيف بيشتغل**: أول مرة يفتح فيها حد التطبيق (`streamlit run app.py`) وما يلاقي الملفات محليًا، بينزلها تلقائيًا (مع progress bar)، وبعدين ما بيعيد التحميل تاني طالما الملف موجود بنفس المجلد. لو التحميل فشل (مثلاً مافيش إنترنت)، بيطلع رسالة واضحة تقولك تحمّل الملف يدويًا.
-
-> ملاحظة: لو رفعت الملفات فعلاً محليًا بجانب `app.py` (مش عن طريق الرابط)، مش لازم تعدّل `MODEL_URL`/`TEMPERATURE_URL` أصلاً — الكود بيشيك الملف المحلي أول، ولو موجود بيتجاهل الرابط كليًا.
-
-## ملاحظات مهمة قبل المناقشة (Defense)
-
-1. **ترتيب الفئات (Emotion Labels)**: مبني على `sorted(os.listdir(train_path))`
-   بالضبط متل ما سوى في التدريب: `['Angry','Disgust','Fear','Happy','Neutral','Sad','Surprise']`.
-   إذا الداتاسيت عندك رتب المجلدات بشكل مختلف، لازم تتأكد من `EMOTION_LABELS` في `model.py`.
-
-2. **الأداء على CPU**: EfficientNet-B3 موديل نسبيًا كبير. على جهاز بدون GPU، الاستدلال
-   كل 5 فريمات لازم يكون كافي لتجربة سلسة تقريبًا. إذا لسه بطيء، زيد رقم
-   `DETECT_EVERY_N_FRAMES` (مثلاً 8 أو 10).
-
-3. **Haar Cascade محدودية**: دقته تنخفض مع الزوايا الحادة أو الإضاءة الضعيفة جدًا —
-   وهاد نقطة كويسة تذكرها بالمناقشة كـ "Future Work" (مثلاً الترقية لـ MediaPipe لاحقًا).
-
-4. **الموديل ثابت (frozen) وقت الاستدلال**: `model.eval()` مفعّل، فـ BatchNorm/Dropout
-   ما رح يتغيروا أثناء التشغيل الحي، تمامًا متل وقت التقييم بالنوتبوك.
+- Use Chrome or Edge, press the lock/camera icon by the address bar, and set Camera to **Allow**.
+- Close Zoom, Teams, or any other program using the camera.
+- The first model load can take 20–60 seconds on CPU.
+- If it is slow, set `DETECT_EVERY_N_FRAMES = 10` in `app.py`.
+- If `load_state_dict` reports missing/unexpected keys, share the complete error: it means the checkpoint architecture differs from the combined model expected here.
