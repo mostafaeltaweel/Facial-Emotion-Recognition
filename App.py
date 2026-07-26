@@ -29,10 +29,6 @@ from streamlit_webrtc import webrtc_streamer, WebRtcMode, VideoProcessorBase
 from model import load_model, EMOTION_LABELS, EMOTION_EMOJI
 from preprocessing import face_crop_to_tensor
 
-st.write("CV2 FILE:", cv2.__file__)
-st.write("CV2 VERSION:", getattr(cv2, "__version__", "Unknown"))
-st.write("Has CascadeClassifier:", hasattr(cv2, "CascadeClassifier"))
-st.write("Has data:", hasattr(cv2, "data"))
 # ─────────────────────────── Configuration ───────────────────────────
 MODEL_PATH = "best_model_combined.pth"  # local filename the model is saved/downloaded as
 TEMPERATURE_PATH = "temperature.json"   # produced by the training notebook (calibration)
