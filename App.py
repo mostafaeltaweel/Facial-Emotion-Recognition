@@ -18,6 +18,7 @@ the user takes a snapshot, gets an instant analysis, and can retake it in one
 click for a "semi-live" experience that works reliably everywhere.
 """
 
+import io
 import json
 import os
 import tempfile
@@ -28,6 +29,7 @@ import requests
 import streamlit as st
 import torch
 import torch.nn.functional as F
+from PIL import Image
 
 from model import load_model, EMOTION_LABELS, EMOTION_EMOJI
 from preprocessing import face_crop_to_tensor
@@ -199,7 +201,82 @@ def analyze_and_display(model, img_bgr):
             st.progress(float(p))
 
 
-def analyze_video(model, video_path, interval_seconds):
+def analyze_video_dense(model, video_path, target_fps=8, max_frames=200):
+    """For SHORT clips with fast-changing emotions: samples frames much more
+    densely (several per second instead of one per minute), draws the box on
+    every sampled frame, and logs only the moments where the detected emotion
+    actually CHANGES (not every single frame — avoids a noisy repeated log).
+
+    Returns: (annotated_frames_rgb: list[np.ndarray], change_log: list[(timestamp_str, label, confidence)])
+    """
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        st.error("تعذّر فتح ملف الفيديو. جرّب صيغة mp4.")
+        return [], []
+
+    src_fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    step = max(1, round(src_fps / target_fps))
+
+    annotated_frames = []
+    change_log = []
+    last_label = None
+
+    progress = st.progress(0.0)
+    frame_idx = 0
+    processed = 0
+    while processed < max_frames and frame_idx < total_frames:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+        ok, frame = cap.read()
+        if not ok:
+            break
+
+        seconds = frame_idx / src_fps
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        faces = FACE_CASCADE.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(60, 60))
+
+        label, confidence = "لا يوجد وجه", 0.0
+        if len(faces) > 0:
+            x, y, w, h = max(faces, key=lambda f: f[2] * f[3])
+            face_crop = frame[y:y + h, x:x + w]
+            probs = predict_emotion(model, face_crop, use_tta=False)
+            draw_result(frame, x, y, w, h, probs)
+            top_idx = int(np.argmax(probs))
+            label = EMOTION_LABELS[top_idx]
+            confidence = float(probs[top_idx])
+
+        annotated_frames.append(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+
+        if label != last_label:
+            mins, secs = divmod(seconds, 60)
+            timestamp_str = f"{int(mins):02d}:{secs:05.2f}"
+            change_log.append((timestamp_str, label, confidence))
+            last_label = label
+
+        processed += 1
+        frame_idx += step
+        progress.progress(min(processed / min(max_frames, total_frames // step + 1), 1.0))
+
+    cap.release()
+    progress.empty()
+    return annotated_frames, change_log
+
+
+def frames_to_gif_bytes(frames_rgb, fps):
+    """Builds an in-memory animated GIF from RGB frames. GIF is used instead of
+    an encoded video file because browsers reliably play back GIFs everywhere,
+    while OpenCV's mp4 writer (mp4v codec) often fails to play in-browser."""
+    pil_frames = [Image.fromarray(f) for f in frames_rgb]
+    buffer = io.BytesIO()
+    duration_ms = int(1000 / fps)
+    pil_frames[0].save(
+        buffer, format="GIF", save_all=True,
+        append_images=pil_frames[1:], duration=duration_ms, loop=0,
+    )
+    return buffer.getvalue()
+
+
+
     """Samples frames from a video file every `interval_seconds` seconds,
     runs face detection + emotion prediction on each sample, and returns a
     timeline: list of (timestamp_str, label, confidence, thumbnail_rgb)."""
@@ -293,15 +370,14 @@ elif mode == "🖼️ رفع صورة":
         analyze_and_display(model, img_bgr)
 
 else:
-    st.info("ارفع فيديو (mp4 يفضّل)، وسيتم تحليل تعبير الوجه كل فترة زمنية تختارها وعرض خط زمني بالنتائج.")
+    st.info("ارفع فيديو (mp4 يفضّل). للفيديوهات القصيرة اللي فيها تغيّر مشاعر سريع، استخدم "
+            "'تتبع دقيق' عشان يلقط كل تغيّر مع فيديو معلّم بالمربع.")
 
     interval_choice = st.selectbox(
-        "افحص الفيديو كل:",
-        ["15 ثانية", "30 ثانية", "دقيقة واحدة", "دقيقتين"],
-        index=2,
+        "طريقة التحليل:",
+        ["🔍 تتبع دقيق (فيديو قصير، كل تغيّر)", "15 ثانية", "30 ثانية", "دقيقة واحدة", "دقيقتين"],
+        index=0,
     )
-    interval_map = {"15 ثانية": 15, "30 ثانية": 30, "دقيقة واحدة": 60, "دقيقتين": 120}
-    interval_seconds = interval_map[interval_choice]
 
     video_file = st.file_uploader("ارفع ملف الفيديو", type=["mp4", "mov", "avi", "mkv"])
 
@@ -312,22 +388,45 @@ else:
             tmp_path = tmp.name
 
         try:
-            timeline = analyze_video(model, tmp_path, interval_seconds)
+            if interval_choice.startswith("🔍"):
+                target_fps = st.slider("عدد اللقطات بالثانية (دقة التتبع):", 2, 15, 8)
+                frames_rgb, change_log = analyze_video_dense(model, tmp_path, target_fps=target_fps)
+
+                if not frames_rgb:
+                    st.warning("لم يتم استخراج أي لقطات من الفيديو.")
+                else:
+                    st.subheader("🎬 الفيديو المعلّم (مع مربع تحديد الوجه)")
+                    gif_bytes = frames_to_gif_bytes(frames_rgb, fps=target_fps)
+                    st.image(gif_bytes, use_container_width=True)
+
+                    st.subheader("📋 سجل تغيّر المشاعر")
+                    if not change_log:
+                        st.write("لم يتم رصد أي تغيّر في المشاعر خلال الفيديو.")
+                    for timestamp_str, label, confidence in change_log:
+                        if label == "لا يوجد وجه":
+                            st.write(f"**{timestamp_str}** — لا يوجد وجه ظاهر")
+                        else:
+                            emoji = EMOTION_EMOJI.get(label, "")
+                            st.write(f"**{timestamp_str}** ← {emoji} **{label}** ({confidence*100:.0f}%)")
+            else:
+                interval_map = {"15 ثانية": 15, "30 ثانية": 30, "دقيقة واحدة": 60, "دقيقتين": 120}
+                interval_seconds = interval_map[interval_choice]
+                timeline = analyze_video(model, tmp_path, interval_seconds)
+
+                if not timeline:
+                    st.warning("لم يتم استخراج أي لقطات من الفيديو.")
+                else:
+                    st.subheader("📋 الخط الزمني للمشاعر")
+                    for timestamp_str, label, confidence, thumb_rgb in timeline:
+                        col1, col2 = st.columns([1, 3])
+                        with col1:
+                            st.image(thumb_rgb, use_container_width=True)
+                        with col2:
+                            if label == "لا يوجد وجه":
+                                st.write(f"**{timestamp_str}** — لا يوجد وجه ظاهر بهذه اللحظة")
+                            else:
+                                emoji = EMOTION_EMOJI.get(label, "")
+                                st.write(f"**{timestamp_str}** — {emoji} {label} ({confidence*100:.0f}%)")
+                        st.divider()
         finally:
             os.remove(tmp_path)
-
-        if not timeline:
-            st.warning("لم يتم استخراج أي لقطات من الفيديو.")
-        else:
-            st.subheader("📋 الخط الزمني للمشاعر")
-            for timestamp_str, label, confidence, thumb_rgb in timeline:
-                col1, col2 = st.columns([1, 3])
-                with col1:
-                    st.image(thumb_rgb, use_container_width=True)
-                with col2:
-                    if label == "لا يوجد وجه":
-                        st.write(f"**{timestamp_str}** — لا يوجد وجه ظاهر بهذه اللحظة")
-                    else:
-                        emoji = EMOTION_EMOJI.get(label, "")
-                        st.write(f"**{timestamp_str}** — {emoji} {label} ({confidence*100:.0f}%)")
-                st.divider()
