@@ -395,7 +395,7 @@ else:
                 if not frames_rgb:
                     st.warning("لم يتم استخراج أي لقطات من الفيديو.")
                 else:
-                    st.subheader("🎬 الفيديو المعلّم (مع مربع تحديد الوجه)")
+                    st.subheader("🎬 Video Analysis by Frames")
                     gif_bytes = frames_to_gif_bytes(frames_rgb, fps=target_fps)
                     st.image(gif_bytes, use_container_width=True)
 
