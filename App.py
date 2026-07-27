@@ -338,8 +338,8 @@ def frames_to_gif_bytes(frames_rgb, fps):
 
 
 # ─────────────────────────── Streamlit UI ───────────────────────────
-st.set_page_config(page_title="Facial Emotion Recognition", page_icon="🎭", layout="centered")
-st.title("🎭 Facial Emotion Recognition")
+st.set_page_config(page_title="EmoLens", page_icon="🎭", layout="centered")
+st.title("🎭 EmoLens")
 st.caption("EfficientNet-B3 + CBAM | Graduation Project")
 
 mode = st.radio(
