@@ -4,7 +4,7 @@
 
 Copy these two files beside `app.py`:
 
-- `C:\Users\Admin\Downloads\best_model_combined (4).pth` → rename to `best_model_combined.pth`
+- `C:\Users\Admin\Downloads\best_model_combined.pth` → rename to `best_model_combined.pth`
 - `C:\Users\Admin\Downloads\temperature.json` → keep this exact name
 
 `state.db` is not needed for running the model.
